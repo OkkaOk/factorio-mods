@@ -12,9 +12,10 @@ function logistics.on_tick()
 			goto next_player
 		end
 
-		if player.character_personal_logistic_requests_enabled then
+		local logistic_point = player.get_requester_point();
+		if logistic_point ~= nil and logistic_point.enabled then
 			player.print("Your personal logistics are controlled by the mod Instant Personal Logistics. No need to enable this")
-			player.character_personal_logistic_requests_enabled = false
+			logistic_point.enabled = false
 		end
 
 		if settings.global["ipl-global-transfer"].value then
@@ -55,60 +56,74 @@ function logistics.handle_requests(network, player)
 	local player_trash = player.get_inventory(defines.inventory.character_trash)
 	if player_inv == nil or player_ammo == nil then return false end
 
-	local inv_contents = player_inv.get_contents()
-	if player.cursor_stack ~= nil and player.cursor_stack.valid_for_read then
-		inv_contents[player.cursor_stack.name] = (inv_contents[player.cursor_stack.name] or 0) + player.cursor_stack.count
-	end
-
-	-- Every logistic request is fulfilled 
+	-- Every logistic request is fulfilled
 	local requests_fulfilled = true
 
-	for i=1, player.character.request_slot_count do
-		local request = player.get_personal_logistic_slot(i)
-		if request == nil or request.name == nil then
-			goto next_request
-		end
+	local logistic_point = player.get_requester_point();
+	if (logistic_point == nil) then
+		return false
+	end
 
-		local existing_count = (inv_contents[request.name] or 0) + player_ammo.get_item_count(request.name)
-		if request.min ~= nil and existing_count < request.min then
-			local needed = request.min - existing_count
-
-			local took_from_network = network.remove_item({ name = request.name, count = needed })
-
-			-- Network didn't have this item
-			if took_from_network <= 0 then
-				requests_fulfilled = false
+	for i = 1, logistic_point.sections_count do
+		local section = logistic_point.get_section(i);
+		for j = 1, section.filters_count do
+			local request = section.get_slot(j);
+			if request == nil or request.value == nil or request.value.name == nil then
 				goto next_request
 			end
 
-			if took_from_network < needed then
-				requests_fulfilled = false
+			local existing_count = player_inv.get_item_count(request.value.name) + player_ammo.get_item_count(request.value.name)
+			if player.cursor_stack ~= nil and player.cursor_stack.valid_for_read and player.cursor_stack.name == request.value.name then
+				existing_count = existing_count + player.cursor_stack.count
 			end
 
-			local ammo_inserted = player_ammo.insert({ name = request.name, count = took_from_network })
-			took_from_network = took_from_network - ammo_inserted
+			if request.min ~= nil and existing_count < request.min then
+				local needed = request.min - existing_count
 
-			if took_from_network > 0 then
-				local inv_inserted = player_inv.insert({ name = request.name, count = took_from_network })
-				took_from_network = took_from_network - inv_inserted
+				local took_from_network = network.remove_item({ name = request.value.name, count = needed })
+
+				-- Network didn't have this item
+				if took_from_network <= 0 then
+					requests_fulfilled = false
+					goto next_request
+				end
+
+				if took_from_network < needed then
+					requests_fulfilled = false
+				end
+
+				local ammo_inserted = player_ammo.insert({ name = request.value.name, count = took_from_network })
+				took_from_network = took_from_network - ammo_inserted
+
+				if took_from_network > 0 then
+					local inv_inserted = player_inv.insert({ name = request.value.name, count = took_from_network })
+					took_from_network = took_from_network - inv_inserted
+				end
+
+				-- Player inventory couldn't fit all the items we took from logistics network so we need to put them back
+				if took_from_network > 0 then
+					network.insert({ name = request.value.name, count = took_from_network })
+					requests_fulfilled = false
+				end
 			end
 
-			-- Player inventory couldn't fit all the items we took from logistics network so we need to put them back
-			if took_from_network > 0 then
-				network.insert({ name = request.name, count = took_from_network })
-				requests_fulfilled = false
+			-- Insert items that go over the max amount to trash
+			if player_trash ~= nil and request.max ~= nil and existing_count > request.max then
+				local to_remove = player_trash.insert({ name = request.value.name, count = existing_count - request.max })
+
+				if to_remove > 0 then
+					local ammo_removed = player_ammo.remove({ name = request.value.name, count = to_remove })
+					to_remove = to_remove - ammo_removed
+				end
+
+				if to_remove > 0 then
+					local items_removed = player_inv.remove({ name = request.value.name, count = to_remove })
+					to_remove = to_remove - items_removed
+				end
 			end
+
+			::next_request::
 		end
-
-		-- Insert items that go over the max amount to trash
-		if player_trash ~= nil and request.max ~= nil and existing_count > request.max then
-			local moved = player_trash.insert({ name = request.name, count = existing_count - request.max })
-			if moved > 0 then
-				player_inv.remove({ name = request.name, count = moved })
-			end
-		end
-
-		::next_request::
 	end
 
 	return requests_fulfilled
@@ -125,18 +140,18 @@ function logistics.handle_trash(network, player)
 	local trash_emptied = true
 
 	-- Remove trash
-	for item_name, count in pairs(player_trash.get_contents()) do
-		local inserted = network.insert({ name = item_name, count = count })
+	for i, item in pairs(player_trash.get_contents()) do
+		local inserted = network.insert({ name = item.name, count = item.count })
 
 		if trash_overflow_deletion then
-			player_trash.remove({ name = item_name, count = count })
+			player_trash.remove({ name = item.name, count = item.count })
 		else
 			if inserted > 0 then
-				player_trash.remove({ name = item_name, count = inserted })
+				player_trash.remove({ name = item.name, count = inserted })
 			end
 
 			-- Trash didn't fit into logistics network
-			if inserted < count then
+			if inserted < item.count then
 				trash_emptied = false
 			end
 		end
