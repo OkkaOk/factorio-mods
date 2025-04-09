@@ -8,14 +8,13 @@ function logistics.on_tick()
 	for _, player in pairs(game.players) do
 		if player == nil or player.character == nil then goto next_player end
 
-		if not player.force.character_logistic_requests or not player.mod_settings["ipl-enabled"].value then
+		if player.force.character_logistic_requests == false or player.mod_settings["ipl-enabled"].value == false then
 			goto next_player
 		end
 
 		local logistic_point = player.get_requester_point();
-		if logistic_point ~= nil and logistic_point.enabled then
-			player.print("Your personal logistics are controlled by the mod Instant Personal Logistics. No need to enable this")
-			logistic_point.enabled = false
+		if logistic_point == nil or logistic_point.enabled == false then
+			goto next_player
 		end
 
 		if settings.global["ipl-global-transfer"].value then
@@ -66,6 +65,10 @@ function logistics.handle_requests(network, player)
 
 	for i = 1, logistic_point.sections_count do
 		local section = logistic_point.get_section(i);
+		if section.active == false then
+			goto next_section
+		end
+
 		for j = 1, section.filters_count do
 			local request = section.get_slot(j);
 			if request == nil or request.value == nil or request.value.name == nil then
@@ -77,19 +80,18 @@ function logistics.handle_requests(network, player)
 				existing_count = existing_count + player.cursor_stack.count
 			end
 
+			-- Take items from the network and insert them into the player's inventory
 			if request.min ~= nil and existing_count < request.min then
 				local needed = request.min - existing_count
-
 				local took_from_network = network.remove_item({ name = request.value.name, count = needed })
-
-				-- Network didn't have this item
-				if took_from_network <= 0 then
-					requests_fulfilled = false
-					goto next_request
-				end
 
 				if took_from_network < needed then
 					requests_fulfilled = false
+
+					-- Network didn't have this item
+					if took_from_network <= 0 then
+						goto next_request
+					end
 				end
 
 				local ammo_inserted = player_ammo.insert({ name = request.value.name, count = took_from_network })
@@ -108,7 +110,7 @@ function logistics.handle_requests(network, player)
 			end
 
 			-- Insert items that go over the max amount to trash
-			if player_trash ~= nil and request.max ~= nil and existing_count > request.max then
+			if request.max ~= nil and player_trash ~= nil and existing_count > request.max then
 				local to_remove = player_trash.insert({ name = request.value.name, count = existing_count - request.max })
 
 				if to_remove > 0 then
@@ -124,6 +126,8 @@ function logistics.handle_requests(network, player)
 
 			::next_request::
 		end
+
+		::next_section::
 	end
 
 	return requests_fulfilled

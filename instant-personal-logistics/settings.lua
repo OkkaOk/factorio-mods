@@ -22,7 +22,7 @@ data:extend({
       type = "int-setting",
       name = "ipl-ticks-per-transfer",
       setting_type = "runtime-global",
-      default_value = 120,
+      default_value = 60,
 		minimum_value = 1,
    },
 })
