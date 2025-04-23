@@ -3,6 +3,10 @@ local logistics = {}
 ---@type { [integer]: integer }
 local player_last_updated = {}
 
+---@class surface_networks
+	---@field name string
+	---@field networks LuaLogisticNetwork[]
+
 ---@param player LuaPlayer?
 function logistics.handle_player(player)
 	if not player or not logistics.should_process_player(player) then return end
@@ -24,24 +28,35 @@ end
 ---@param player LuaPlayer
 ---@param logistic_point LuaLogisticPoint
 function logistics.transfer_from_all_networks(player, logistic_point)
-	for surface, networks in pairs(player.force.logistic_networks) do
-		if settings.global["ipl-limit-surface"].value and surface ~= player.surface.name then
-			goto next_surface
-		end
+	---@type surface_networks[]
+	local surfaces = {}
 
-		for _, network in ipairs(networks) do
+	for surface, networks in pairs(player.force.logistic_networks) do
+		if not settings.global["ipl-limit-surface"].value or surface == player.surface.name then
+			surfaces[#surfaces+1] = { name = surface, networks = networks }
+		end
+	end
+
+	-- Sorts the networks so that the current surface is first
+	table.sort(surfaces, function (a, b)
+		return a.name == player.surface.name
+	end)
+
+	local requests_fulfilled = true
+	local trash_emptied = true
+
+	for _, surface in pairs(surfaces) do
+		for _, network in ipairs(surface.networks) do
 			if logistics.is_personal_network(network) then goto next_network end
 
-			local requests_fulfilled = logistics.handle_requests(network, player, logistic_point)
-			local trash_emptied = logistics.handle_trash(network, player)
+			requests_fulfilled = logistics.handle_requests(network, player, logistic_point)
+			trash_emptied = logistics.handle_trash(network, player)
 
 			-- Saves a bit of time if there are a lot of logistic networks
 			if requests_fulfilled and trash_emptied then return end
 
 			::next_network::
 		end
-
-		::next_surface::
 	end
 end
 
@@ -88,7 +103,6 @@ function logistics.handle_requests(network, player, logistic_point)
 
 	return requests_fulfilled
 end
-
 
 ---@param player LuaPlayer
 ---@param item ItemIDAndQualityIDPair
