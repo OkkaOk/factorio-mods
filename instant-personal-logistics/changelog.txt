@@ -3,6 +3,8 @@ Version: 1.1.1
 Date: 23. 04. 2025
   Changes:
     - Use the network(s) on the current surface first if the surface limitation is off
+  Bugfixes:
+    - Fix issue with trash overflow deletion setting
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.0
 Date: 23. 04. 2025

@@ -58,6 +58,10 @@ function logistics.transfer_from_all_networks(player, logistic_point)
 			::next_network::
 		end
 	end
+
+	if not trash_emptied and player.mod_settings["ipl-delete-trash-overflow"].value then
+		logistics.handle_trash(nil, player)
+	end
 end
 
 ---@param player LuaPlayer
@@ -183,13 +187,12 @@ function logistics.trash_excess_items(request, existing_count, main_inv, ammo_in
 end
 
 -- Move items from trash slots to the network
----@param network LuaLogisticNetwork
+---@param network LuaLogisticNetwork?
 ---@param player LuaPlayer
 function logistics.handle_trash(network, player)
 	if not player.mod_settings["ipl-trash-enabled"].value then return true end
 
 	local player_trash = player.get_inventory(defines.inventory.character_trash)
-	local trash_overflow_deletion = player.mod_settings["ipl-delete-trash-overflow"].value
 
 	if not player_trash then return true end
 
@@ -197,13 +200,18 @@ function logistics.handle_trash(network, player)
 
 	-- Remove trash
 	for i, item in pairs(player_trash.get_contents()) do
-		local inserted = network.insert({ name = item.name, count = item.count, quality = item.quality })
-		local to_remove = inserted
-		if trash_overflow_deletion then
-			to_remove = item.count
+		local to_remove_from_trash = item.count
+		local trash_removed = 0
+
+		-- Network is nil only when we're deleting the trash overflow
+		if network then
+			local inserted = network.insert({ name = item.name, count = item.count, quality = item.quality })
+			to_remove_from_trash = inserted
 		end
 
-		local trash_removed = player_trash.remove({ name = item.name, count = to_remove, quality = item.quality })
+		if to_remove_from_trash > 0 then
+			trash_removed = player_trash.remove({ name = item.name, count = to_remove_from_trash, quality = item.quality })
+		end
 
 		-- Trash didn't fit into logistics network
 		if trash_removed < item.count then
