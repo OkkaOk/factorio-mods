@@ -5,6 +5,7 @@ Date: 23. 04. 2025
     - Use the network(s) on the current surface first if the surface limitation is off
   Bugfixes:
     - Fix issue with trash overflow deletion setting
+    - Fix crash when there weren't any logistic filters set
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.0
 Date: 23. 04. 2025

@@ -79,6 +79,7 @@ end
 ---@param logistic_point LuaLogisticPoint
 function logistics.handle_requests(network, player, logistic_point)
 	if not player.mod_settings["ipl-requests-enabled"].value then return true end
+	if not logistic_point.filters then return true end
 
 	local main_inv = player.get_inventory(defines.inventory.character_main)
 	local ammo_inv = player.get_inventory(defines.inventory.character_ammo)
