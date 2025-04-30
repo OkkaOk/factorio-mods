@@ -81,10 +81,7 @@ function logistics.handle_requests(network, player, logistic_point)
 	if not player.mod_settings["ipl-requests-enabled"].value then return true end
 	if not logistic_point.filters then return true end
 
-	local main_inv = player.get_inventory(defines.inventory.character_main)
-	local ammo_inv = player.get_inventory(defines.inventory.character_ammo)
 	local trash_inv = player.get_inventory(defines.inventory.character_trash)
-	if not main_inv then return true end
 
 	-- Every logistic request is fulfilled
 	local requests_fulfilled = true
@@ -92,16 +89,13 @@ function logistics.handle_requests(network, player, logistic_point)
 	for _, filter in ipairs(logistic_point.filters) do
 		if not filter or not filter.name then goto next_request end
 
-		---@type ItemIDAndQualityIDPair
-		local item_identifier = { name = filter.name, quality = filter.quality }
+		local existing_count = player.get_item_count({ name = filter.name, quality = filter.quality })
 
-		local existing_count = logistics.get_existing_item_count(player, item_identifier, main_inv, ammo_inv)
-
-		if not logistics.insert_needed_items(network, filter, existing_count, main_inv, ammo_inv) then
+		if not logistics.insert_needed_items(network, player, filter, existing_count) then
 			requests_fulfilled = false
 		end
 
-		logistics.trash_excess_items(filter, existing_count, main_inv, ammo_inv, trash_inv)
+		logistics.trash_excess_items(player, filter, existing_count, trash_inv)
 
 		::next_request::
 	end
@@ -109,34 +103,12 @@ function logistics.handle_requests(network, player, logistic_point)
 	return requests_fulfilled
 end
 
----@param player LuaPlayer
----@param item ItemIDAndQualityIDPair
----@param main_inv LuaInventory
----@param ammo_inv LuaInventory?
-function logistics.get_existing_item_count(player, item, main_inv, ammo_inv)
-	local count = main_inv.get_item_count(item)
-
-	if ammo_inv then
-		count = count + ammo_inv.get_item_count(item)
-	end
-
-	if player.cursor_stack and player.cursor_stack.valid_for_read and
-		player.cursor_stack.name == item.name and
-		player.cursor_stack.quality.name == item.quality then
-
-		count = count + player.cursor_stack.count
-	end
-
-	return count
-end
-
 -- Take the required amount of items from the network and give them to the player
 ---@param network LuaLogisticNetwork
+---@param player LuaPlayer
 ---@param request CompiledLogisticFilter
 ---@param existing_count integer
----@param main_inv LuaInventory
----@param ammo_inv LuaInventory?
-function logistics.insert_needed_items(network, request, existing_count, main_inv, ammo_inv)
+function logistics.insert_needed_items(network, player, request, existing_count)
 	if not request.count then return true end
 
 	local needed = request.count - existing_count
@@ -145,14 +117,7 @@ function logistics.insert_needed_items(network, request, existing_count, main_in
 	local took = network.remove_item({ name = request.name, count = needed, quality = request.quality })
 	if took <= 0 then return false end -- Network didn't have this item
 
-	local remaining = took
-	if ammo_inv then
-		remaining = remaining - ammo_inv.insert({ name = request.name, count = remaining, quality = request.quality })
-	end
-
-	if remaining > 0 then
-		remaining = remaining - main_inv.insert({ name = request.name, count = remaining, quality = request.quality })
-	end
+	local remaining = took - player.insert({ name = request.name, count = took, quality = request.quality })
 
 	-- Player inventory couldn't fit all the items we took from logistics network so we need to put them back
 	if remaining > 0 then
@@ -164,26 +129,20 @@ function logistics.insert_needed_items(network, request, existing_count, main_in
 end
 
 -- Insert items that go over the max amount to trash
+---@param player LuaPlayer
 ---@param request CompiledLogisticFilter
 ---@param existing_count integer
----@param main_inv LuaInventory
----@param ammo_inv LuaInventory?
 ---@param trash_inv LuaInventory?
-function logistics.trash_excess_items(request, existing_count, main_inv, ammo_inv, trash_inv)
+function logistics.trash_excess_items(player, request, existing_count, trash_inv)
 	if not request.max_count or not trash_inv then return end
 
 	local excess = existing_count - request.max_count
 	if excess <= 0 then return end
 
-	local to_trash = trash_inv.insert({ name = request.name, count = excess, quality = request.quality })
-	local leftover = to_trash
+	local removed = player.remove_item({ name = request.name, count = excess, quality = request.quality })
 
-	if leftover > 0 and ammo_inv then
-		leftover = leftover - ammo_inv.remove({ name = request.name, count = leftover, quality = request.quality })
-	end
-
-	if leftover > 0 then
-		leftover = leftover - main_inv.remove({ name = request.name, count = leftover, quality = request.quality })
+	if removed > 0 then
+		trash_inv.insert({ name = request.name, count = removed, quality = request.quality })
 	end
 end
 
