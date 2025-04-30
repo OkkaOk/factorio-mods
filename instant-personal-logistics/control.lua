@@ -60,7 +60,8 @@ function logistics.transfer_from_all_networks(player, logistic_point)
 	end
 
 	if not trash_emptied and player.mod_settings["ipl-delete-trash-overflow"].value then
-		logistics.handle_trash(nil, player)
+		local trash_inv = player.get_inventory(defines.inventory.character_trash)
+		if trash_inv then trash_inv.clear() end
 	end
 end
 
@@ -71,7 +72,12 @@ function logistics.transfer_from_local_network(player, logistic_point)
 	if not network then return end
 
 	logistics.handle_requests(network, player, logistic_point)
-	logistics.handle_trash(network, player)
+	local trash_emptied = logistics.handle_trash(network, player)
+
+	if not trash_emptied and player.mod_settings["ipl-delete-trash-overflow"].value then
+		local trash_inv = player.get_inventory(defines.inventory.character_trash)
+		if trash_inv then trash_inv.clear() end
+	end
 end
 
 ---@param network LuaLogisticNetwork
@@ -147,27 +153,22 @@ function logistics.trash_excess_items(player, request, existing_count, trash_inv
 end
 
 -- Move items from trash slots to the network
----@param network LuaLogisticNetwork?
+---@param network LuaLogisticNetwork
 ---@param player LuaPlayer
 function logistics.handle_trash(network, player)
 	if not player.mod_settings["ipl-trash-enabled"].value then return true end
 
 	local player_trash = player.get_inventory(defines.inventory.character_trash)
-
 	if not player_trash then return true end
 
 	local trash_emptied = true
 
 	-- Remove trash
 	for i, item in pairs(player_trash.get_contents()) do
-		local to_remove_from_trash = item.count
 		local trash_removed = 0
 
-		-- Network is nil only when we're deleting the trash overflow
-		if network then
-			local inserted = network.insert({ name = item.name, count = item.count, quality = item.quality })
-			to_remove_from_trash = inserted
-		end
+		local inserted = network.insert({ name = item.name, count = item.count, quality = item.quality })
+		local to_remove_from_trash = inserted
 
 		if to_remove_from_trash > 0 then
 			trash_removed = player_trash.remove({ name = item.name, count = to_remove_from_trash, quality = item.quality })

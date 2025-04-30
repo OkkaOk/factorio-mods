@@ -3,6 +3,8 @@ Version: 1.2.0
 Date: 30. 04. 2025
   Changes:
     - Doesn't put ammo on a slot where there is no weapon.
+  Bugfixes:
+    - Fix another issue with trash overflow deletion setting not deleting the trash if global transfer was off
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.1
 Date: 23. 04. 2025
@@ -11,6 +13,7 @@ Date: 23. 04. 2025
   Bugfixes:
     - Fix issue with trash overflow deletion setting
     - Fix crash when there weren't any logistic filters set
+    - Fix crash when the trash couldn't fit into the logistic network
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.0
 Date: 23. 04. 2025
