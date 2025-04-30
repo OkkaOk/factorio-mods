@@ -26,6 +26,12 @@ data:extend({
 	},
 	{
 		type = "bool-setting",
+		name = "ipl-notify-full",
+		setting_type = "runtime-per-user",
+		default_value = true,
+	},
+	{
+		type = "bool-setting",
 		name = "ipl-global-transfer",
 		setting_type = "runtime-global",
 		default_value = true,

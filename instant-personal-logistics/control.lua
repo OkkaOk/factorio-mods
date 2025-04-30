@@ -53,16 +53,15 @@ function logistics.transfer_from_all_networks(player, logistic_point)
 			trash_emptied = logistics.handle_trash(network, player)
 
 			-- Saves a bit of time if there are a lot of logistic networks
-			if requests_fulfilled and trash_emptied then return end
+			if requests_fulfilled and trash_emptied then goto finished end
 
 			::next_network::
 		end
 	end
 
-	if not trash_emptied and player.mod_settings["ipl-delete-trash-overflow"].value then
-		local trash_inv = player.get_inventory(defines.inventory.character_trash)
-		if trash_inv then trash_inv.clear() end
-	end
+	::finished::
+
+	logistics.post_handle_trash(player, trash_emptied)
 end
 
 ---@param player LuaPlayer
@@ -73,11 +72,7 @@ function logistics.transfer_from_local_network(player, logistic_point)
 
 	logistics.handle_requests(network, player, logistic_point)
 	local trash_emptied = logistics.handle_trash(network, player)
-
-	if not trash_emptied and player.mod_settings["ipl-delete-trash-overflow"].value then
-		local trash_inv = player.get_inventory(defines.inventory.character_trash)
-		if trash_inv then trash_inv.clear() end
-	end
+	logistics.post_handle_trash(player, trash_emptied)
 end
 
 ---@param network LuaLogisticNetwork
@@ -181,6 +176,21 @@ function logistics.handle_trash(network, player)
 	end
 
 	return trash_emptied
+end
+
+---@param player LuaPlayer
+---@param trash_emptied boolean
+function logistics.post_handle_trash(player, trash_emptied)
+	if trash_emptied then return end
+
+	if player.mod_settings["ipl-notify-full"].value then
+		player.print("Your logistic network(s) are out of storage space!", { skip = defines.print_skip.if_visible })
+	end
+
+	if player.mod_settings["ipl-delete-trash-overflow"].value then
+		local trash_inv = player.get_inventory(defines.inventory.character_trash)
+		if trash_inv then trash_inv.clear() end
+	end
 end
 
 ---@param network LuaLogisticNetwork

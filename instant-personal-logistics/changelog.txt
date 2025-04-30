@@ -1,8 +1,11 @@
 ---------------------------------------------------------------------------------------------------
 Version: 1.2.0
 Date: 30. 04. 2025
+  Features:
+    - Add option to notify you when the trash couldn't be emptied because the logistic network(s) were full
   Changes:
     - Doesn't put ammo on a slot where there is no weapon.
+    - Described the settings a bit better
   Bugfixes:
     - Fix another issue with trash overflow deletion setting not deleting the trash if global transfer was off
 ---------------------------------------------------------------------------------------------------
