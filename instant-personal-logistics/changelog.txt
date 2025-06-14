@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.3.0
+Date: 14. 05. 2025
+  Features:
+    - You can customize the priorities where you request and trash items from/to
+  Changes:
+    - Combined some settings into selection boxes
+    - Also check if trash inventory has the requested item just in case
+  Bugfixes:
+    - Fix issue with accidental excess deletion if the trash inventory itself couldn't fit the items
+---------------------------------------------------------------------------------------------------
 Version: 1.2.0
 Date: 30. 04. 2025
   Features:

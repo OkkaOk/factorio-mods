@@ -16,10 +16,10 @@ function logistics.handle_player(player)
 
 	if not logistic_point.enabled and not player.mod_settings["ipl-force-enabled"].value then return end
 
-	if settings.global["ipl-global-transfer"].value then
-		logistics.transfer_from_all_networks(player, logistic_point)
-	else
+	if settings.global["ipl-transfer-mode"].value == "local" then
 		logistics.transfer_from_local_network(player, logistic_point)
+	else
+		logistics.transfer_from_all_networks(player, logistic_point)
 	end
 
 	player_last_updated[player.index] = game.tick
@@ -32,30 +32,52 @@ function logistics.transfer_from_all_networks(player, logistic_point)
 	local surfaces = {}
 
 	for surface, networks in pairs(player.force.logistic_networks) do
-		if not settings.global["ipl-limit-surface"].value or surface == player.surface.name then
+		if settings.global["ipl-transfer-mode"].value == "interplanetary" or surface == player.surface.name then
 			surfaces[#surfaces+1] = { name = surface, networks = networks }
 		end
 	end
 
-	-- Sorts the networks so that the current surface is first
+	local request_priority = player.mod_settings["ipl-request-priority"].value
+
+	-- Sorts the networks according to the request_priority
 	table.sort(surfaces, function (a, b)
-		return a.name == player.surface.name
+		return (request_priority == "current" and a.name == player.surface.name) or (a.name == request_priority)
 	end)
 
 	local requests_fulfilled = true
-	local trash_emptied = true
-
 	for _, surface in pairs(surfaces) do
 		for _, network in ipairs(surface.networks) do
 			if logistics.is_personal_network(network) then goto next_network end
 
 			requests_fulfilled = logistics.handle_requests(network, player, logistic_point)
+
+			-- Saves a bit of time if there are a lot of logistic networks
+			if requests_fulfilled then goto requests_finished end
+
+			::next_network::
+		end
+	end
+
+	::requests_finished::
+
+	local trash_priority = player.mod_settings["ipl-trash-priority"].value
+
+	-- Sorts the networks according to the trash_priority
+	table.sort(surfaces, function (a, b)
+		return (trash_priority == "current" and a.name == player.surface.name) or (a.name == trash_priority)
+	end)
+
+	local trash_emptied = true
+	for _, surface in pairs(surfaces) do
+		for _, network in ipairs(surface.networks) do
+			if logistics.is_personal_network(network) then goto next_network2 end
+
 			trash_emptied = logistics.handle_trash(network, player)
 
 			-- Saves a bit of time if there are a lot of logistic networks
-			if requests_fulfilled and trash_emptied then goto finished end
+			if trash_emptied then goto finished end
 
-			::next_network::
+			::next_network2::
 		end
 	end
 
@@ -79,7 +101,7 @@ end
 ---@param player LuaPlayer
 ---@param logistic_point LuaLogisticPoint
 function logistics.handle_requests(network, player, logistic_point)
-	if not player.mod_settings["ipl-requests-enabled"].value then return true end
+	if not player.mod_settings["ipl-request-enabled"].value then return true end
 	if not logistic_point.filters then return true end
 
 	local trash_inv = player.get_inventory(defines.inventory.character_trash)
@@ -115,6 +137,23 @@ function logistics.insert_needed_items(network, player, request, existing_count)
 	local needed = request.count - existing_count
 	if needed <= 0 then return true end
 
+	-- Lets first check if there are some in the trash inventory
+	local trash_inv = player.get_inventory(defines.inventory.character_trash)
+	local trash_took = 0
+	if trash_inv then
+		trash_took = trash_inv.remove({ name = request.name, count = needed, quality = request.quality })
+	end
+
+	if trash_inv and trash_took > 0 then
+		local t_insterted = player.insert({ name = request.name, count = trash_took, quality = request.quality })
+		if trash_took > t_insterted then
+			trash_inv.insert({ name = request.name, count = trash_took - t_insterted, quality = request.quality })
+		end
+
+		needed = needed - t_insterted
+		if needed == 0 then return true end
+	end
+
 	local took = network.remove_item({ name = request.name, count = needed, quality = request.quality })
 	if took <= 0 then return false end -- Network didn't have this item
 
@@ -122,11 +161,13 @@ function logistics.insert_needed_items(network, player, request, existing_count)
 
 	-- Player inventory couldn't fit all the items we took from logistics network so we need to put them back
 	if remaining > 0 then
-		network.insert({ name = request.name, count = took, quality = request.quality })
+		network.insert({ name = request.name, count = remaining, quality = request.quality })
 		return false
 	end
 
-	return took >= needed
+	needed = needed - took
+
+	return needed == 0
 end
 
 -- Insert items that go over the max amount to trash
@@ -143,7 +184,12 @@ function logistics.trash_excess_items(player, request, existing_count, trash_inv
 	local removed = player.remove_item({ name = request.name, count = excess, quality = request.quality })
 
 	if removed > 0 then
-		trash_inv.insert({ name = request.name, count = removed, quality = request.quality })
+		local trash_inserted = trash_inv.insert({ name = request.name, count = removed, quality = request.quality })
+
+		-- Trash inventory couldn't fit all the items we removed so we need to put them back
+		if removed > trash_inserted  then
+			player.insert({ name = request.name, count = removed - trash_inserted, quality = request.quality })
+		end
 	end
 end
 
@@ -162,7 +208,7 @@ function logistics.handle_trash(network, player)
 	for i, item in pairs(player_trash.get_contents()) do
 		local trash_removed = 0
 
-		local inserted = network.insert({ name = item.name, count = item.count, quality = item.quality })
+		local inserted = network.insert({ name = item.name, count = item.count, quality = item.quality }, "storage")
 		local to_remove_from_trash = inserted
 
 		if to_remove_from_trash > 0 then
